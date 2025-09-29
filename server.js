@@ -26,8 +26,11 @@ app.post('/iclock/cdata', async (req, res) => {
   const parsed = rows.map(line => line.split('\t'));
   console.log('Parsed:', JSON.stringify(parsed));
 
+  // const ipBe = 'https://be.smart-bookingpontianak.com' // ganti sesuai kebutuhan
+  const ipBe = 'https://staging.be.cip.onet.my.id' // ganti sesuai kebutuhan
+
   try {
-  const targetUrl = 'http://localhost:8080/i-button-reader/amt-in/' + parsed[0][0];
+  const targetUrl = `${ipBe}/i-button-reader/amt-in/` + parsed[0][0];
   
   console.log('--- Forwarding Request ---');
   console.log('URL:', targetUrl);
