@@ -10,7 +10,7 @@ const INPORT = 5200
 const TIMEOUT = 5000
 
 // konfigurasi
-const POLL_DELAY_MS = 3000
+const POLL_DELAY_MS = 5000
 const DUPLICATE_WINDOW_MS = 5000
 const REALTIME_WAIT_MS = 10000
 const RETRY_COUNT = 3
