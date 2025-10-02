@@ -31,7 +31,7 @@ process.on("unhandledRejection", (reason) => {
 async function sendToServer(log) {
     const userId = log.deviceUserId || ''
     if (!userId) throw new Error('empty userId')
-    const url = `https://be.smart-bookingpontianak.com/i-button-reader/amt-in/${userId}`
+    const url = `https://be.smart-bookingpontianak.com/i-button-reader/amt-auto-status/${userId}`
     return axios.get(url, { timeout: 10000 })
 }
 
