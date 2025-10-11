@@ -8,6 +8,8 @@ const DEVICE_IP = '192.168.3.200'
 const PORT = 4370
 const INPORT = 5200
 const TIMEOUT = 5000
+const URL = 'https://be.smart-bookingpontianak.com/i-button-reader/amt-auto-status'
+// const URL = 'http://localhost:8080/i-button-reader/amt-auto-status'
 
 // konfigurasi
 const POLL_DELAY_MS = 3000
@@ -33,7 +35,7 @@ process.on("unhandledRejection", (reason) => {
 async function sendToServer(log) {
     const userId = log.deviceUserId || ''
     if (!userId) throw new Error('empty userId')
-    const url = `https://be.smart-bookingpontianak.com/i-button-reader/amt-auto-status/${userId}`
+    const url = `${URL}/${userId}`
     console.log('➡️ Sending to:', url)
     return axios.get(url, { timeout: 10000 })
 }
