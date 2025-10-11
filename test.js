@@ -1,43 +1,26 @@
-process.setMaxListeners(0)
+const ZKLib = require('node-zklib');
 
-console.log("=== 🚀 node-zklib ===")
-
-const ip = "192.168.3.200"   // ganti sesuai IP mesin Anda
-const port = 4370
-const inport = 5200
-const timeout = 5000
-
-// ========================
-// 1. node-zklib
-// ========================
-async function testNodeZKLib() {
-    console.log("\n=== [1] node-zklib ===")
+(async () => {
     try {
-        const ZKLib = require('node-zklib')
-        let zk = new ZKLib(ip, port, inport, timeout)
-        await zk.createSocket()
-        console.log("✅ Tersambung node-zklib")
+        // inisialisasi koneksi ke mesin
+        const zkInstance = new ZKLib('192.168.3.200', 4370, 10000, 4000);
 
-        const info = await zk.getInfo()
-        console.log("ℹ️ Info:", info)
+        // buka koneksi
+        await zkInstance.createSocket();
+        console.log('✅ Terhubung ke mesin X105');
 
-        const logs = await zk.getAttendances()
-        console.log("📌 Attendance:", logs?.data?.slice(-5)) // ambil 5 terakhir
+        // ambil semua log absensi
+        const logs = await zkInstance.getAttendances();
+        console.log('📋 Data Absensi:', logs.data);
 
-        zk.getRealTimeLogs((log) => {
-            console.log("📡 Realtime log (node-zklib):", log)
-        })
+        // contoh: iterasi dan tampilkan
+        logs.data.forEach(log => {
+            console.log(`UserID: ${log.userId}, Waktu: ${log.timestamp}`);
+        });
 
+        // tutup koneksi setelah selesai
+        await zkInstance.disconnect();
     } catch (err) {
-        console.error("❌ node-zklib gagal:", err.message)
+        console.error('❌ Error:', err);
     }
-}
-
-// ========================
-// JALANKAN SEMUA
-// ========================
-async function runAll() {
-    await testNodeZKLib()
-}
-
-runAll()
+})();

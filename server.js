@@ -1,7 +1,7 @@
 // live-reader.js
 process.setMaxListeners(0)
 
-const ZKLib = require('node-zklib') // atau 'zklib-js'
+const ZKLib = require('node-zklib')
 const axios = require('axios')
 
 const DEVICE_IP = '192.168.3.200'
@@ -15,9 +15,11 @@ const DUPLICATE_WINDOW_MS = 5000
 const REALTIME_WAIT_MS = 10000
 const RETRY_COUNT = 3
 
-// cache
+// cache / state
 const lastSent = {}
 const seenSn = new Set()
+const processedKeys = new Set()
+const failedLogs = new Set()
 
 // ========== GLOBAL ERROR HANDLER ==========
 process.on("uncaughtException", (err) => {
@@ -32,6 +34,7 @@ async function sendToServer(log) {
     const userId = log.deviceUserId || ''
     if (!userId) throw new Error('empty userId')
     const url = `https://be.smart-bookingpontianak.com/i-button-reader/amt-auto-status/${userId}`
+    console.log('➡️ Sending to:', url)
     return axios.get(url, { timeout: 10000 })
 }
 
@@ -44,8 +47,11 @@ async function handleLog(log) {
         return false
     }
 
-    if (sn !== null && seenSn.has(sn)) {
-        console.log(`⚠️ skip duplicate userSn=${sn}`)
+    const key = `${userId}-${sn || log.recordTime}`
+
+    // skip kalau sudah pernah diproses
+    if (processedKeys.has(key)) {
+        console.log(`⚠️ skip already processed: ${key}`)
         return false
     }
 
@@ -60,10 +66,13 @@ async function handleLog(log) {
         await sendToServer(log)
         console.log('✅ Sent:', userId, log.recordTime)
         lastSent[userId] = logTime
+        processedKeys.add(key)
         if (sn !== null) seenSn.add(sn)
         return true
     } catch (err) {
         console.error('❌ Failed send for', userId, err.message || err.toString())
+        processedKeys.add(key)
+        failedLogs.add(key)
         return false
     }
 }
@@ -74,6 +83,15 @@ async function startHybrid() {
     try {
         await zk.createSocket()
         console.log('✅ Connected to device', DEVICE_IP)
+
+        // ✅ Clear logs saat pertama kali konek
+        try {
+            console.log('🧹 Clearing logs on startup...')
+            await zk.clearAttendanceLog()
+            console.log('✅ Logs cleared successfully on startup')
+        } catch (err) {
+            console.warn('⚠️ Failed to clear logs on startup:', err.message)
+        }
 
         // coba realtime
         let gotRealtime = false
@@ -131,24 +149,21 @@ async function pollingLoop(zkInstance) {
 
             if (!success) {
                 console.log('❌ getAttendances gagal semua percobaan, tunggu...')
+                await tryClearLogsAlways(zkInstance) // ✅ tetap clear logs meski gagal baca
                 await sleep(POLL_DELAY_MS)
                 continue
             }
 
             const allLogs = Array.isArray(logsResponse.data) ? logsResponse.data : []
-            if (allLogs.length === 0) {
-                await sleep(POLL_DELAY_MS)
-                continue
-            }
-
             console.log(`=== RAW LOGS (${allLogs.length}) ===`)
             allLogs.forEach(l => console.log('➡', l.userSn ?? '-', l.deviceUserId, l.recordTime))
 
-            // filter
+            // filter log unik
             const toProcess = []
             for (const log of allLogs) {
+                const key = `${log.deviceUserId}-${log.userSn || log.recordTime}`
                 if (!log.deviceUserId) continue
-                if (log.userSn && seenSn.has(log.userSn)) continue
+                if (processedKeys.has(key)) continue
                 const lt = new Date(log.recordTime).getTime()
                 const last = lastSent[log.deviceUserId] || 0
                 if (lt - last <= DUPLICATE_WINDOW_MS) continue
@@ -158,32 +173,32 @@ async function pollingLoop(zkInstance) {
             console.log(`=== FILTERED (${toProcess.length}) ===`)
             toProcess.forEach(l => console.log('->', l.userSn ?? '-', l.deviceUserId, l.recordTime))
 
-            // kirim
+            // kirim log
             let allSent = true
             for (const log of toProcess) {
                 const ok = await handleLog(log)
                 if (!ok) allSent = false
             }
 
-            // hapus log hanya kalau semua sukses
-            if (allSent && toProcess.length > 0) {
-                try {
-                    await zkInstance.clearAttendanceLog()
-                    console.log('🧹 Cleared logs from device')
-                    seenSn.clear()
-                    await sleep(2000)
-                } catch (err) {
-                    console.error('❌ Failed clearAttendanceLog:', err.message || err)
-                }
-            } else if (!allSent) {
-                console.log('⚠️ Some logs failed, not clearing')
-            }
+            // ✅ SELALU CLEAR LOGS, apapun hasilnya
+            await tryClearLogsAlways(zkInstance)
 
         } catch (outerErr) {
             console.error('❌ Polling error:', outerErr.message || outerErr)
         }
 
         await sleep(POLL_DELAY_MS)
+    }
+}
+
+async function tryClearLogsAlways(zkInstance) {
+    try {
+        console.log('🧹 Attempting to clear logs from device...')
+        await zkInstance.clearAttendanceLog()
+        console.log('✅ Device logs cleared')
+        seenSn.clear()
+    } catch (err) {
+        console.warn('⚠️ Failed to clear device logs:', err.message)
     }
 }
 
